@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 let db, currentGeo = null, currentFile = null, currentHeading = "-";
 
-// データベース準備
+// 1. データベース準備
 const req = indexedDB.open("offline_field_log_v6", 1);
 req.onupgradeneeded = (e) => {
     const d = e.target.result;
@@ -14,7 +14,7 @@ req.onsuccess = (e) => {
     loadLists(); 
 };
 
-// CSV読込処理
+// 2. CSV読込
 function handleCSVImport(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -61,8 +61,8 @@ function updateSelect(id, items) {
     });
 }
 
+// 3. メイン動作
 window.onload = () => {
-    // ボタンの紐付け
     if($("csvInput")) $("csvInput").onchange = (e) => { if (e.target.files[0]) handleCSVImport(e.target.files[0]); };
 
     $("btnGeo").onclick = async () => {
@@ -71,7 +71,7 @@ window.onload = () => {
             currentGeo = p;
             $("lat").textContent = p.coords.latitude.toFixed(6);
             $("lng").textContent = p.coords.longitude.toFixed(6);
-        }, () => alert("GPSエラー"), {enableHighAccuracy:true});
+        }, () => alert("GPS取得エラー"), {enableHighAccuracy:true});
         window.addEventListener('deviceorientationabsolute', (e) => {
             let a = e.webkitCompassHeading || (360 - (e.alpha || 0));
             const dirs = ["北","北北東","北東","東北東","東","東南東","南東","南南東","南","南南西","南西","西南西","西","西北西","北西","北北西"];
@@ -86,10 +86,10 @@ window.onload = () => {
         if(!currentFile) return alert("写真を撮ってください");
         const data = {
             date: new Date().toLocaleString(),
-            location: $("selLocation").value,
-            subLocation: $("selSubLocation").value,
-            item: $("selItem").value,
-            memo: $("memo").value,
+            location: $("selLocation").value || "未設定",
+            subLocation: $("selSubLocation").value || "-",
+            item: $("selItem").value || "未設定",
+            memo: $("memo").value || "",
             lat: $("lat").textContent,
             lng: $("lng").textContent,
             heading: currentHeading,
@@ -102,30 +102,50 @@ window.onload = () => {
         };
     };
 
-    // 一括ZIP保存ボタンの動作
     if($("btnDownloadAll")) $("btnDownloadAll").onclick = () => exportZip();
     
-    // 全データ消去ボタンの動作
+    // 全データ消去ボタン：削除後に一覧をリセット
     if($("btnDeleteAll")) $("btnDeleteAll").onclick = () => { 
-        if(confirm("保存されているすべてのデータを消去しますか？")) {
-            db.transaction("surveys","readwrite").objectStore("surveys").clear().oncomplete = renderTable; 
+        if(confirm("保存されている全データを消去しますか？")) {
+            const tx = db.transaction("surveys", "readwrite");
+            tx.objectStore("surveys").clear();
+            tx.oncomplete = () => {
+                alert("🗑️ データを全消去しました");
+                renderTable(); // 一覧表示を更新（空にする）
+            };
         }
     };
 };
 
+// 4. 履歴の表示（GPSチェック列を追加）
 function renderTable() {
+    if(!db) return;
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
         const all = e.target.result.reverse();
         const list = $("list");
-        let html = `<tr><th>地点</th><th>項目</th><th>写真</th></tr>`;
+        // ヘッダーにGPS列を追加
+        let html = `<tr><th style="width:35%;">地点</th><th style="width:35%;">項目</th><th style="width:15%;">GPS</th><th style="width:15%;">写真</th></tr>`;
+        
+        if (all.length === 0) {
+            list.innerHTML = html; // データがなければヘッダーのみ表示
+            return;
+        }
+
         all.forEach(r => {
-            html += `<tr><td>${r.location}</td><td>${r.item}</td>
-                     <td><button onclick="vImg(${r.id})" style="background:#00bb55; color:white; border:none; padding:5px 10px; border-radius:5px;">◯</button></td></tr>`;
+            // GPSが取得できているか判定（緯度が '-' でなければ ok）
+            const gpsStatus = (r.lat && r.lat !== "-") ? "ok" : "-";
+            html += `<tr>
+                <td>${r.location}</td>
+                <td>${r.item}</td>
+                <td style="color:${gpsStatus==='ok'?'#00ff00':'#ff0000'}">${gpsStatus}</td>
+                <td><button onclick="vImg(${r.id})" style="background:#00bb55; color:white; border:none; padding:5px 8px; border-radius:5px;">◯</button></td>
+            </tr>`;
         });
         list.innerHTML = html;
     };
 }
 
+// 5. 写真確認
 window.vImg = (id) => {
     db.transaction("surveys", "readonly").objectStore("surveys").get(id).onsuccess = (e) => {
         const d = e.target.result;
@@ -133,17 +153,19 @@ window.vImg = (id) => {
             const reader = new FileReader();
             reader.onload = (ev) => {
                 const win = window.open("");
-                win.document.write(`<html><body style="margin:0;background:#000;"><img src="${ev.target.result}" style="width:100%;"></body></html>`);
+                win.document.write(`<html><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;height:100vh;"><img src="${ev.target.result}" style="max-width:100%;max-height:100%;"></body></html>`);
             };
             reader.readAsDataURL(d.photoBlob);
         }
     };
 }
 
+// 6. ZIP保存
 function exportZip() {
-    if (typeof JSZip === "undefined") return alert("jszip.min.jsが読み込まれていません。フォルダにファイルを置いてください。");
+    if (typeof JSZip === "undefined") return alert("jszip.min.jsが読み込まれていません");
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
         const all = e.target.result;
+        if (all.length === 0) return alert("保存するデータがありません");
         const zip = new JSZip();
         let csv = "\ufeff日時,地点,小区分,項目,緯度,経度,方位,備考\n";
         all.forEach(r => {
@@ -152,9 +174,9 @@ function exportZip() {
         });
         zip.file("data.csv", csv);
         zip.generateAsync({type:"blob"}).then(b => {
-            const a = document.createElement("a"); 
-            a.href = URL.createObjectURL(b); 
-            a.download = "FieldLog_Data.zip"; 
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(b);
+            a.download = "FieldLog_Data.zip";
             a.click();
         });
     };
