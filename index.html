@@ -3,43 +3,67 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>FieldLog v8.6 Offline</title>
+  <title>FieldLog v8.8 Offline</title>
   <style>
     body { background:#000; color:#fff; font-family:sans-serif; margin:0; padding:10px; }
     .card { background:#111; border:1px solid #333; padding:15px; border-radius:12px; margin-bottom:15px; }
+    
+    /* 設定アコーディオン */
+    details { background:#222; border-radius:8px; margin-bottom:15px; border:1px solid #444; }
+    summary { padding:12px; cursor:pointer; font-weight:bold; color:#aaa; outline:none; }
+    .config-content { padding:15px; border-top:1px solid #444; }
+
     .btn-main { width:100%; border-radius:12px; border:none; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; margin-bottom:12px; font-weight:bold; }
     .photo-btn { background:#00bb55; height:100px; font-size:20px; }
     .geo-btn { background:#007bff; height:85px; font-size:18px; }
     .btn-save { background:#dc3545; height:90px; font-size:22px; width:100%; border-radius:12px; border:none; color:white; font-weight:bold; }
+    
     .geo-info { background:#000; border:1px solid #222; padding:10px; margin-bottom:12px; text-align:center; font-family:monospace; color:#00ff00; }
     .input-field { width:100%; background:#222; color:#fff; border:1px solid #444; padding:12px; border-radius:8px; margin-bottom:10px; font-size:16px; }
-    table { width:100%; border-collapse:collapse; font-size:12px; }
-    th, td { border:1px solid #333; padding:8px; text-align:center; }
+    
+    /* 履歴テーブルと下部ボタン */
+    table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+    th, td { border:1px solid #333; padding:8px; text-align:center; background: #111; }
+    .footer-btns { display:flex; justify-content:space-between; gap:10px; margin-top:10px; }
+    .btn-sub { flex:1; color:white; border:none; padding:15px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; }
   </style>
 </head>
 <body>
   <main>
+    <details>
+      <summary>▼ ⚙ CSV読込 (A:地点, B:小区分, C:項目)</summary>
+      <div class="config-content">
+        <p style="font-size:12px; color:#ccc; margin:0 0 10px 0;">リスト更新用のCSVを選択してください</p>
+        <input type="file" id="csvInput" accept=".csv" class="input-field">
+      </div>
+    </details>
+
     <section class="card">
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
         <label class="btn-main photo-btn">📷 写真を撮る<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;"></label>
-        <div id="btnGeo" class="btn-main geo-btn">📍 位置記録</div>
+        <div id="btnGeo" class="btn-main geo-btn">📍 位置・方位を記録</div>
       </div>
-      <div class="geo-info">緯度: <span id="lat">-</span><br>経度: <span id="lng">-</span><br>方位: <span id="heading">-</span></div>
       
+      <div class="geo-info">
+        緯度: <span id="lat">-</span> / 経度: <span id="lng">-</span><br>
+        方位: <span id="heading">-</span>
+      </div>
+
       <select id="selLocation" class="input-field"><option value="">地点を選択</option></select>
       <select id="selSubLocation" class="input-field"><option value="">小区分を選択</option></select>
       <select id="selItem" class="input-field"><option value="">項目を選択</option></select>
       
-      <textarea id="memo" class="input-field" style="height:60px;" placeholder="備考"></textarea>
-      <button id="btnSave" class="btn-save">💾 データを保存</button>
+      <textarea id="memo" class="input-field" style="height:60px;" placeholder="備考を入力"></textarea>
+      <button id="btnSave" class="btn-save">💾 記録を保存</button>
     </section>
 
     <section class="card">
-      <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-        <button id="btnDownloadAll" style="background:#007bff; color:white; border:none; padding:12px; border-radius:8px; font-weight:bold;">📦 一括ZIP保存</button>
-        <button id="btnDeleteAll" style="background:#600; color:white; border:none; padding:12px; border-radius:8px;">⚠️ 全削除</button>
+      <div class="footer-btns">
+        <button id="btnDownloadAll" class="btn-sub" style="background:#007bff;">📦 一括ZIP保存</button>
+        <button id="btnDeleteAll" class="btn-sub" style="background:#600;">⚠️ 全データ消去</button>
       </div>
-      <table id="list"></table>
+      <table id="list">
+        </table>
     </section>
   </main>
 
@@ -47,7 +71,7 @@
   <script src="app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
+      navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
     }
   </script>
 </body>
