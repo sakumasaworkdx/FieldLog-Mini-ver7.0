@@ -1,15 +1,43 @@
 const $ = (id) => document.getElementById(id);
 let db, currentGeo = null, currentFile = null, currentHeading = "-";
 
-// 1. DB準備
+// 1. データベース準備 (listsストアを必ず作成)
 const req = indexedDB.open("offline_field_log_v6", 1);
 req.onupgradeneeded = (e) => {
     const d = e.target.result;
     if (!d.objectStoreNames.contains("surveys")) d.createObjectStore("surveys", { keyPath: "id", autoIncrement: true });
+    if (!d.objectStoreNames.contains("lists")) d.createObjectStore("lists", { keyPath: "id" });
 };
-req.onsuccess = (e) => { db = e.target.result; renderTable(); };
+req.onsuccess = (e) => { 
+    db = e.target.result; 
+    renderTable(); 
+    loadLists(); // セレクトボックスの選択肢を読み込む
+};
 
-// 2. センサー機能
+// 2. 選択肢リスト（地点など）の読み込み機能
+function loadLists() {
+    const tx = db.transaction("lists", "readonly");
+    tx.objectStore("lists").getAll().onsuccess = (e) => {
+        const data = e.target.result;
+        // 地点、小区分、項目のリストを更新
+        updateSelect("selLocation", data.filter(d => d.type === "location"));
+        updateSelect("selSubLocation", data.filter(d => d.type === "subLocation"));
+        updateSelect("selItem", data.filter(d => d.type === "item"));
+    };
+}
+
+function updateSelect(id, items) {
+    const sel = $(id);
+    const originalText = sel.options[0].text;
+    sel.innerHTML = `<option value="">${originalText}</option>`;
+    items.forEach(item => {
+        const opt = document.createElement("option");
+        opt.value = opt.textContent = item.name;
+        sel.appendChild(opt);
+    });
+}
+
+// 3. センサー機能
 function getGPS() {
     navigator.geolocation.getCurrentPosition(p => {
         currentGeo = p;
@@ -18,9 +46,8 @@ function getGPS() {
     }, (e) => alert("GPS取得失敗"), {enableHighAccuracy:true});
 }
 
-// 3. イベント割り当て
+// 4. イベント割り当て
 window.onload = () => {
-    // 位置記録ボタン
     $("btnGeo").onclick = async () => {
         if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
             await DeviceOrientationEvent.requestPermission().catch(e=>console.log(e));
@@ -36,7 +63,6 @@ window.onload = () => {
 
     $("photoInput").onchange = (e) => { currentFile = e.target.files[0]; };
 
-    // 保存ボタン
     $("btnSave").onclick = () => {
         if(!currentFile) return alert("写真を撮影してください");
         const data = {
@@ -64,7 +90,7 @@ window.onload = () => {
     };
 };
 
-// 4. 履歴表示とフィルタ生成
+// 5. 履歴表示とフィルタ生成
 function renderTable() {
     if(!db) return;
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
@@ -101,7 +127,7 @@ function renderTable() {
     };
 }
 
-// 5. 写真表示 (オフライン・iPhone対応)
+// 6. 写真表示 (オフライン・iPhone対応)
 window.vImg = (id) => {
     db.transaction("surveys", "readonly").objectStore("surveys").get(id).onsuccess = (e) => {
         const d = e.target.result;
@@ -116,7 +142,7 @@ window.vImg = (id) => {
     };
 };
 
-// 6. ZIP書き出し (ローカルJSZip使用)
+// 7. ZIP書き出し (ローカルJSZip使用)
 function exportZip() {
     if (typeof JSZip === "undefined") return alert("jszip.min.js が見つかりません。");
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
