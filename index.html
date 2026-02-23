@@ -1,46 +1,35 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22FieldLog%22,%22short_name%22:%22FieldLog%22,%22start_url%22:%22./%22,%22display%22:%22standalone%22}">
-  <title>FieldLog v6.5</title>
+  <title>FieldLog v8.5 Offline</title>
   <style>
     body { background:#000; color:#fff; font-family:sans-serif; margin:0; padding:10px; }
     .card { background:#111; border:1px solid #333; padding:15px; border-radius:12px; margin-bottom:15px; }
     .btn-main { width:100%; border-radius:12px; border:none; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; margin-bottom:12px; font-weight:bold; }
     .photo-btn { background:#00bb55; height:100px; font-size:20px; }
     .geo-btn { background:#007bff; height:85px; font-size:18px; }
-    .btn-save { background:#dc3545; height:90px; font-size:24px; }
-    .geo-info-box { background:#000; color:#0f0; padding:15px; border-radius:8px; font-family:monospace; line-height:1.6; border:1px solid #333; margin-bottom:15px; }
-    .input-field { width:100%; background:#222; color:#fff; border:1px solid #444; padding:14px; border-radius:8px; margin-bottom:10px; font-size:16px; box-sizing:border-box; }
+    .btn-save { background:#dc3545; height:90px; font-size:22px; width:100%; border-radius:12px; border:none; color:white; font-weight:bold; }
+    .geo-info { background:#000; border:1px solid #222; padding:10px; margin-bottom:12px; text-align:center; font-family:monospace; color:#00ff00; }
+    .input-field { width:100%; background:#222; color:#fff; border:1px solid #444; padding:12px; border-radius:8px; margin-bottom:10px; font-size:16px; }
     table { width:100%; border-collapse:collapse; font-size:12px; }
-    td { padding:10px; border-bottom:1px solid #333; }
-    summary { cursor:pointer; color:#aaa; padding:5px; }
+    th, td { border:1px solid #333; padding:8px; text-align:center; }
   </style>
 </head>
 <body>
-  <main style="max-width:500px; margin:0 auto;">
-    <details class="card">
-      <summary>⚙️ CSV読込 (A:地点, B:小区分, C:項目)</summary>
-      <input id="listCsvInput" type="file" accept=".csv" style="width:100%; margin-top:10px;">
-    </details>
-
+  <main>
     <section class="card">
-      <label class="btn-main photo-btn">
-        <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none;">
-        <span style="font-size:35px; margin-right:15px;">📷</span> 写真を撮る <span id="photoCheck"></span>
-      </label>
-      <button id="btnGeo" class="btn-main geo-btn" type="button">
-        <span style="font-size:30px; margin-right:15px;">📍</span> 位置・方位を記録 <span id="geoCheck"></span>
-      </button>
-      <div id="previewContainer" style="text-align:center; display:none; margin-bottom:15px;"><img id="imgPreview" style="max-width:100%; border-radius:8px;"></div>
-      <div class="geo-info-box">緯度: <span id="lat">-</span><br>経度: <span id="lng">-</span><br>方位: <span id="heading">-</span></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+        <label class="btn-main photo-btn">📷 写真を撮る<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;"></label>
+        <div id="btnGeo" class="btn-main geo-btn">📍 位置記録</div>
+      </div>
+      <div class="geo-info">緯度: <span id="lat">-</span><br>経度: <span id="lng">-</span><br>方位: <span id="heading">-</span></div>
       <select id="selLocation" class="input-field"><option value="">地点を選択</option></select>
       <select id="selSubLocation" class="input-field"><option value="">小区分を選択</option></select>
       <select id="selItem" class="input-field"><option value="">項目を選択</option></select>
-      <textarea id="memo" class="input-field" style="height:80px;" placeholder="備考"></textarea>
-      <button id="btnSave" class="btn-save btn-main">💾 データを保存</button>
+      <textarea id="memo" class="input-field" style="height:60px;" placeholder="備考"></textarea>
+      <button id="btnSave" class="btn-save">💾 データを保存</button>
     </section>
 
     <section class="card">
@@ -51,20 +40,13 @@
       <table id="list"></table>
     </section>
   </main>
+
+  <script src="jszip.min.js"></script>
+  <script src="app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').then(reg => {
-        reg.onupdatefound = () => {
-          const installingWorker = reg.installing;
-          installingWorker.onstatechange = () => {
-            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              alert("最新版に更新されました。再起動してください。");
-            }
-          };
-        };
-      });
+      navigator.serviceWorker.register('./sw.js');
     }
   </script>
-  <script src="./app.js"></script>
 </body>
 </html>
