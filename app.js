@@ -1,25 +1,50 @@
 const $ = (id) => document.getElementById(id);
 let db, currentGeo = null, currentFile = null, currentHeading = "-";
 
-// 1. データベース準備 (listsストアを必ず作成)
+// データベース準備
 const req = indexedDB.open("offline_field_log_v6", 1);
 req.onupgradeneeded = (e) => {
     const d = e.target.result;
     if (!d.objectStoreNames.contains("surveys")) d.createObjectStore("surveys", { keyPath: "id", autoIncrement: true });
-    if (!d.objectStoreNames.contains("lists")) d.createObjectStore("lists", { keyPath: "id" });
+    if (!d.objectStoreNames.contains("lists")) d.createObjectStore("lists", { keyPath: "id", autoIncrement: true });
 };
 req.onsuccess = (e) => { 
     db = e.target.result; 
     renderTable(); 
-    loadLists(); // セレクトボックスの選択肢を読み込む
+    loadLists(); 
 };
 
-// 2. 選択肢リスト（地点など）の読み込み機能
+// CSV読込処理
+function handleCSVImport(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target.result;
+        const lines = text.split(/\r\n|\n/);
+        const locations = new Set(), sub = new Set(), items = new Set();
+        lines.forEach((line, i) => {
+            if (!line || i === 0) return;
+            const cols = line.split(",");
+            if (cols.length >= 3) {
+                if (cols[0]) locations.add(cols[0].trim());
+                if (cols[1]) sub.add(cols[1].trim());
+                if (cols[2]) items.add(cols[2].trim());
+            }
+        });
+        const tx = db.transaction("lists", "readwrite");
+        const store = tx.objectStore("lists");
+        store.clear().onsuccess = () => {
+            locations.forEach(v => store.add({ type: "location", name: v }));
+            sub.forEach(v => store.add({ type: "subLocation", name: v }));
+            items.forEach(v => store.add({ type: "item", name: v }));
+        };
+        tx.oncomplete = () => { alert("✅ リストを更新しました"); loadLists(); };
+    };
+    reader.readAsText(file);
+}
+
 function loadLists() {
-    const tx = db.transaction("lists", "readonly");
-    tx.objectStore("lists").getAll().onsuccess = (e) => {
+    db.transaction("lists", "readonly").objectStore("lists").getAll().onsuccess = (e) => {
         const data = e.target.result;
-        // 地点、小区分、項目のリストを更新
         updateSelect("selLocation", data.filter(d => d.type === "location"));
         updateSelect("selSubLocation", data.filter(d => d.type === "subLocation"));
         updateSelect("selItem", data.filter(d => d.type === "item"));
@@ -27,9 +52,8 @@ function loadLists() {
 }
 
 function updateSelect(id, items) {
-    const sel = $(id);
-    const originalText = sel.options[0].text;
-    sel.innerHTML = `<option value="">${originalText}</option>`;
+    const sel = $(id); if (!sel) return;
+    sel.innerHTML = `<option value="">${sel.options[0].text}</option>`;
     items.forEach(item => {
         const opt = document.createElement("option");
         opt.value = opt.textContent = item.name;
@@ -37,114 +61,87 @@ function updateSelect(id, items) {
     });
 }
 
-// 3. センサー機能
-function getGPS() {
-    navigator.geolocation.getCurrentPosition(p => {
-        currentGeo = p;
-        if($("lat")) $("lat").textContent = p.coords.latitude.toFixed(6);
-        if($("lng")) $("lng").textContent = p.coords.longitude.toFixed(6);
-    }, (e) => alert("GPS取得失敗"), {enableHighAccuracy:true});
-}
-
-// 4. イベント割り当て
 window.onload = () => {
+    // ボタンの紐付け
+    if($("csvInput")) $("csvInput").onchange = (e) => { if (e.target.files[0]) handleCSVImport(e.target.files[0]); };
+
     $("btnGeo").onclick = async () => {
-        if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
-            await DeviceOrientationEvent.requestPermission().catch(e=>console.log(e));
-        }
-        getGPS();
+        if (typeof DeviceOrientationEvent?.requestPermission === 'function') await DeviceOrientationEvent.requestPermission();
+        navigator.geolocation.getCurrentPosition(p => {
+            currentGeo = p;
+            $("lat").textContent = p.coords.latitude.toFixed(6);
+            $("lng").textContent = p.coords.longitude.toFixed(6);
+        }, () => alert("GPSエラー"), {enableHighAccuracy:true});
         window.addEventListener('deviceorientationabsolute', (e) => {
             let a = e.webkitCompassHeading || (360 - (e.alpha || 0));
             const dirs = ["北","北北東","北東","東北東","東","東南東","南東","南南東","南","南南西","南西","西南西","西","西北西","北西","北北西"];
             currentHeading = dirs[Math.round(a / 22.5) % 16];
-            if($("heading")) $("heading").textContent = currentHeading;
+            $("heading").textContent = currentHeading;
         }, true);
     };
 
     $("photoInput").onchange = (e) => { currentFile = e.target.files[0]; };
 
     $("btnSave").onclick = () => {
-        if(!currentFile) return alert("写真を撮影してください");
+        if(!currentFile) return alert("写真を撮ってください");
         const data = {
             date: new Date().toLocaleString(),
-            location: $("selLocation").value || "未設定",
-            subLocation: $("selSubLocation").value || "-",
-            item: $("selItem").value || "未設定",
-            memo: $("memo").value || "",
-            lat: currentGeo ? currentGeo.coords.latitude : "-",
-            lng: currentGeo ? currentGeo.coords.longitude : "-",
+            location: $("selLocation").value,
+            subLocation: $("selSubLocation").value,
+            item: $("selItem").value,
+            memo: $("memo").value,
+            lat: $("lat").textContent,
+            lng: $("lng").textContent,
             heading: currentHeading,
             photoBlob: currentFile
         };
-        const tx = db.transaction("surveys", "readwrite");
-        tx.objectStore("surveys").add(data).onsuccess = () => {
+        db.transaction("surveys", "readwrite").objectStore("surveys").add(data).onsuccess = () => {
             alert("💾 保存完了");
             currentFile = null;
             renderTable();
         };
     };
 
-    $("btnDownloadAll").onclick = () => exportZip();
-    $("btnDeleteAll").onclick = () => {
-        if(confirm("全消去しますか？")) db.transaction("surveys","readwrite").objectStore("surveys").clear().oncomplete = renderTable;
+    // 一括ZIP保存ボタンの動作
+    if($("btnDownloadAll")) $("btnDownloadAll").onclick = () => exportZip();
+    
+    // 全データ消去ボタンの動作
+    if($("btnDeleteAll")) $("btnDeleteAll").onclick = () => { 
+        if(confirm("保存されているすべてのデータを消去しますか？")) {
+            db.transaction("surveys","readwrite").objectStore("surveys").clear().oncomplete = renderTable; 
+        }
     };
 };
 
-// 5. 履歴表示とフィルタ生成
 function renderTable() {
-    if(!db) return;
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
         const all = e.target.result.reverse();
         const list = $("list");
-        if(!list) return;
-
-        if(!$("fArea")) {
-            const div = document.createElement("div"); div.id = "fArea"; div.style = "display:flex; gap:5px; margin-bottom:10px;";
-            div.innerHTML = `<select id="fLoc" style="flex:1; padding:8px; background:#222; color:#fff; border:1px solid #444; border-radius:8px;"><option value="">地点</option></select>
-                             <select id="fItem" style="flex:1; padding:8px; background:#222; color:#fff; border:1px solid #444; border-radius:8px;"><option value="">項目</option></select>`;
-            list.parentNode.insertBefore(div, list);
-            $("fLoc").onchange = $("fItem").onchange = renderTable;
-        }
-
-        const updateOpt = (id, key, label) => {
-            const s = $(id); const val = s.value;
-            const opts = [...new Set(all.map(d => d[key]))].filter(v => v && v !== "-");
-            s.innerHTML = `<option value="">${label}</option>` + opts.map(v => `<option value="${v}">${v}</option>`).join("");
-            s.value = val;
-        };
-        updateOpt("fLoc", "location", "全ての地点");
-        updateOpt("fItem", "item", "全ての項目");
-
-        const fL = $("fLoc").value, fI = $("fItem").value;
-        const filtered = all.filter(r => (!fL || r.location === fL) && (!fI || r.item === fI));
-
-        let html = `<tr><th>地点</th><th>項目</th><th>GPS</th><th>写真</th></tr>`;
-        filtered.forEach(r => {
-            html += `<tr><td>${r.location}</td><td>${r.item}</td><td>${r.lat!=='-'?'ok':'-'}</td>
+        let html = `<tr><th>地点</th><th>項目</th><th>写真</th></tr>`;
+        all.forEach(r => {
+            html += `<tr><td>${r.location}</td><td>${r.item}</td>
                      <td><button onclick="vImg(${r.id})" style="background:#00bb55; color:white; border:none; padding:5px 10px; border-radius:5px;">◯</button></td></tr>`;
         });
         list.innerHTML = html;
     };
 }
 
-// 6. 写真表示 (オフライン・iPhone対応)
 window.vImg = (id) => {
     db.transaction("surveys", "readonly").objectStore("surveys").get(id).onsuccess = (e) => {
         const d = e.target.result;
         if (d && d.photoBlob) {
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = (ev) => {
                 const win = window.open("");
-                win.document.write(`<html><body style="margin:0;background:#000;"><img src="${event.target.result}" style="width:100%;"></body></html>`);
+                win.document.write(`<html><body style="margin:0;background:#000;"><img src="${ev.target.result}" style="width:100%;"></body></html>`);
             };
             reader.readAsDataURL(d.photoBlob);
         }
     };
-};
+}
 
-// 7. ZIP書き出し (ローカルJSZip使用)
 function exportZip() {
-    if (typeof JSZip === "undefined") return alert("jszip.min.js が見つかりません。");
+    if (typeof JSZip === "undefined") return alert("jszip.min.jsが読み込まれていません。フォルダにファイルを置いてください。");
     db.transaction("surveys").objectStore("surveys").getAll().onsuccess = (e) => {
         const all = e.target.result;
         const zip = new JSZip();
@@ -155,9 +152,9 @@ function exportZip() {
         });
         zip.file("data.csv", csv);
         zip.generateAsync({type:"blob"}).then(b => {
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(b);
-            a.download = "FieldLog_Data.zip";
+            const a = document.createElement("a"); 
+            a.href = URL.createObjectURL(b); 
+            a.download = "FieldLog_Data.zip"; 
             a.click();
         });
     };
