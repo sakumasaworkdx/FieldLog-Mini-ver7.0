@@ -1,9 +1,9 @@
-const CACHE_NAME = "fieldlog-v6.5-cache";
+const CACHE_NAME = "fieldlog-v8.5-cache";
 const urlsToCache = [
   "./",
   "index.html",
   "app.js",
-  "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+  "jszip.min.js"
 ];
 
 self.addEventListener("install", (e) => {
